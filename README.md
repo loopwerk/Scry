@@ -11,7 +11,7 @@ Scry does not load the entire image into memory, and as such can be used with la
 ```swift
 import Scry
 
-if let metadata = try Scry.metadata(fromFileAt: "/path/to/photo.jpg") {
+if let metadata = try? Scry.metadata(fromFileAt: "/path/to/photo.jpg") {
   print(metadata["Make"])    // "Apple"
   print(metadata["Model"])   // "iPhone 14 Pro"
   print(metadata["FNumber"]) // 1.78
@@ -32,7 +32,7 @@ dependencies: [
 
 ## Metadata properties
 
-`Scry.metadata` returns a flat `[String: Any]` dictionary. The keys and value types are:
+`Scry.metadata(fromFileAt:)` returns a flat `[String: Any]` dictionary. The keys and value types are:
 
 ### Image info (from TIFF IFD0)
 
