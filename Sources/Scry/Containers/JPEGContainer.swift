@@ -1,71 +1,66 @@
 import Foundation
 
 enum JPEGContainer {
-  /// Extract EXIF TIFF data from a JPEG file.
-  static func extractEXIF(from data: Data) throws -> Data {
-    guard data.count >= 4,
-          data[data.startIndex] == 0xFF,
-          data[data.startIndex + 1] == 0xD8
-    else {
+  /// Extract EXIF TIFF data from a JPEG file handle, reading only metadata segments.
+  static func extractEXIF(from fileHandle: FileHandle) throws -> Data {
+    let soi = fileHandle.readData(ofLength: 2)
+    guard soi.count == 2, soi[0] == 0xFF, soi[1] == 0xD8 else {
       throw EXIFError.invalidJPEGStructure
     }
 
-    var offset = 2
-
-    while offset + 4 <= data.count {
-      let start = data.startIndex + offset
-
-      // Each marker starts with 0xFF
-      guard data[start] == 0xFF else {
+    while true {
+      // Read marker (2 bytes)
+      let markerData = fileHandle.readData(ofLength: 2)
+      guard markerData.count == 2, markerData[0] == 0xFF else {
         throw EXIFError.invalidJPEGStructure
       }
 
-      let marker = data[start + 1]
+      let marker = markerData[1]
 
-      // Skip padding bytes (0xFF 0xFF...)
+      // Skip padding bytes
       if marker == 0xFF {
-        offset += 1
+        fileHandle.seek(toFileOffset: fileHandle.offsetInFile - 1)
         continue
       }
 
-      // SOS (Start of Scan) or EOI — no more metadata segments
-      if marker == 0xDA || marker == 0xD9 {
-        break
-      }
+      // SOS or EOI — no more metadata segments
+      if marker == 0xDA || marker == 0xD9 { break }
 
-      // Markers without a length field (RST, TEM, SOI)
+      // Markers without a length field
       if marker == 0x00 || marker == 0x01 || (0xD0 ... 0xD7).contains(marker) {
-        offset += 2
         continue
       }
 
-      // Read segment length (includes the 2 length bytes but not the marker)
-      guard offset + 4 <= data.count else { break }
-      let length = Int(data[start + 2]) << 8 | Int(data[start + 3])
+      // Read segment length
+      let lengthData = fileHandle.readData(ofLength: 2)
+      guard lengthData.count == 2 else { break }
+      let length = Int(lengthData[0]) << 8 | Int(lengthData[1])
       guard length >= 2 else { throw EXIFError.invalidJPEGStructure }
 
-      // APP1 marker (0xE1) — check for EXIF signature
-      if marker == 0xE1 {
-        let payloadStart = offset + 4
-        let payloadLength = length - 2
+      let payloadLength = length - 2
 
-        if payloadLength >= 6, payloadStart + 6 <= data.count {
-          let sigStart = data.startIndex + payloadStart
-          // "Exif\0\0"
-          if data[sigStart] == 0x45, data[sigStart + 1] == 0x78,
-             data[sigStart + 2] == 0x69, data[sigStart + 3] == 0x66,
-             data[sigStart + 4] == 0x00, data[sigStart + 5] == 0x00
-          {
-            let tiffStart = payloadStart + 6
-            let tiffLength = payloadLength - 6
-            guard tiffStart + tiffLength <= data.count else { throw EXIFError.truncatedData }
-            return Data(data[data.startIndex + tiffStart ..< data.startIndex + tiffStart + tiffLength])
-          }
+      // APP1 marker — check for EXIF signature
+      if marker == 0xE1, payloadLength >= 6 {
+        let sig = fileHandle.readData(ofLength: 6)
+        guard sig.count == 6 else { throw EXIFError.truncatedData }
+        // "Exif\0\0"
+        if sig[0] == 0x45, sig[1] == 0x78, sig[2] == 0x69, sig[3] == 0x66,
+           sig[4] == 0x00, sig[5] == 0x00
+        {
+          let tiffLength = payloadLength - 6
+          let tiffData = fileHandle.readData(ofLength: tiffLength)
+          guard tiffData.count == tiffLength else { throw EXIFError.truncatedData }
+          return tiffData
         }
+        // Not EXIF APP1, skip the rest of this segment
+        let remaining = payloadLength - 6
+        if remaining > 0 {
+          fileHandle.seek(toFileOffset: fileHandle.offsetInFile + UInt64(remaining))
+        }
+      } else {
+        // Skip segment payload
+        fileHandle.seek(toFileOffset: fileHandle.offsetInFile + UInt64(payloadLength))
       }
-
-      // Move to next marker
-      offset += 2 + length
     }
 
     throw EXIFError.noEXIFData

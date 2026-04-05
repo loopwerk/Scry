@@ -2,28 +2,23 @@
 
 A pure Swift EXIF metadata parser. No dependencies, no Apple frameworks. Fully macOS and Linux compatible.
 
-Supports **JPEG**, **PNG**, **WebP**, and **TIFF**.
+Supports **JPEG**, **PNG**, and **WebP** images. 
+
+Scry does not load the entire image into memory, and as such can be used with large image files.
 
 ## Usage
 
 ```swift
 import Scry
 
-// From a file path
 if let metadata = try Scry.metadata(fromFileAt: "/path/to/photo.jpg") {
   print(metadata["Make"])    // "Apple"
   print(metadata["Model"])   // "iPhone 14 Pro"
   print(metadata["FNumber"]) // 1.78
 }
-
-// From Data
-let data = Data(contentsOf: url)
-if let metadata = try Scry.metadata(from: data) {
-  // format is auto-detected
-}
 ```
 
-Returns `nil` when the image has no EXIF data or the format is unsupported.
+Returns `nil` when the image has no EXIF data.
 
 ## Installation
 

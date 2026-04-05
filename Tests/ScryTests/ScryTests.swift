@@ -62,55 +62,47 @@ private func fixtureURL(_ name: String, ext: String) -> URL {
 @Test func jPEG() throws {
   let meta = try Scry.metadata(fromFileAt: fixtureURL("test", ext: "jpg").path)
   #expect(meta != nil)
-  if let meta { assertCommonMetadata(meta) }
+  assertCommonMetadata(try #require(meta))
 }
 
 @Test func pNG() throws {
   let meta = try Scry.metadata(fromFileAt: fixtureURL("test", ext: "png").path)
   #expect(meta != nil)
-  if let meta { assertCommonMetadata(meta) }
+  assertCommonMetadata(try #require(meta))
 }
 
 @Test func webP() throws {
   let meta = try Scry.metadata(fromFileAt: fixtureURL("test", ext: "webp").path)
   #expect(meta != nil)
-  if let meta { assertCommonMetadata(meta) }
-}
-
-@Test func tIFF() throws {
-  let meta = try Scry.metadata(fromFileAt: fixtureURL("test", ext: "tiff").path)
-  #expect(meta != nil)
-  if let meta { assertCommonMetadata(meta) }
+  assertCommonMetadata(try #require(meta))
 }
 
 // MARK: - General tests
 
 @Test func formatDetection() throws {
   let jpeg = try Data(contentsOf: fixtureURL("test", ext: "jpg"))
-  #expect(Scry.detectFormat(jpeg) == .jpeg)
+  #expect(try Scry.detectFormat(jpeg) == .jpeg)
 
   let png = try Data(contentsOf: fixtureURL("test", ext: "png"))
-  #expect(Scry.detectFormat(png) == .png)
+  #expect(try Scry.detectFormat(png) == .png)
 
   let webp = try Data(contentsOf: fixtureURL("test", ext: "webp"))
-  #expect(Scry.detectFormat(webp) == .webp)
+  #expect(try Scry.detectFormat(webp) == .webp)
 
-  let tiff = try Data(contentsOf: fixtureURL("test", ext: "tiff"))
-  #expect(Scry.detectFormat(tiff) == .tiff)
-
-  let gif = Data([0x47, 0x49, 0x46, 0x38] + Array(repeating: UInt8(0), count: 8))
-  #expect(Scry.detectFormat(gif) == nil)
-}
-
-@Test func noEXIF() throws {
-  // Minimal valid JPEG: SOI + EOI
-  let data = Data([0xFF, 0xD8, 0xFF, 0xD9])
-  let meta = try Scry.metadata(from: data, format: .jpeg)
-  #expect(meta == nil)
+  let gif = try Data(contentsOf: fixtureURL("test", ext: "gif"))
+  #expect(throws: EXIFError.unsupportedFormat) {
+    try Scry.detectFormat(gif)
+  }
 }
 
 @Test func unsupportedFormat() throws {
-  let gif = Data([0x47, 0x49, 0x46, 0x38] + Array(repeating: UInt8(0), count: 20))
-  let meta = try Scry.metadata(from: gif)
-  #expect(meta == nil)
+  #expect(throws: EXIFError.unsupportedFormat) {
+    try Scry.metadata(fromFileAt: fixtureURL("test", ext: "gif").path)
+  }
+}
+
+@Test func fileNotFound() throws {
+  #expect(throws: EXIFError.fileNotFound) {
+    try Scry.metadata(fromFileAt: "/nonexistent/path.jpg")
+  }
 }
