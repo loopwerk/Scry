@@ -4,6 +4,8 @@ A pure Swift EXIF metadata parser. No dependencies, no Apple frameworks. Fully m
 
 Supports **JPEG**, **PNG**, and **WebP** images. 
 
+Reads both EXIF and XMP metadata. Some tools (such as macOS image export, Lightroom, or Capture One) only write XMP; Scry maps the common XMP fields onto the same keys and value types as their EXIF equivalents. When a field is present in both, the EXIF value wins.
+
 Scry does not load the entire image into memory, and as such can be used with large image files.
 
 ## Usage
@@ -18,7 +20,7 @@ if let metadata = try? Scry.metadata(fromFileAt: "/path/to/photo.jpg") {
 }
 ```
 
-Returns `nil` when the image has no EXIF data.
+Returns `nil` when the image has no EXIF or XMP data.
 
 ## Installation
 

@@ -1,8 +1,8 @@
 import Foundation
 
 enum WebPContainer {
-  /// Extract EXIF TIFF data from a WebP file handle, reading only chunk headers until EXIF is found.
-  static func extractEXIF(from fileHandle: FileHandle) throws -> Data {
+  /// Extract EXIF and XMP data from a WebP file handle, reading only chunk headers plus the metadata chunks.
+  static func extractMetadata(from fileHandle: FileHandle) throws -> MetadataSegments {
     let header = fileHandle.readData(ofLength: 12)
     guard header.count == 12,
           header[0] == 0x52, header[1] == 0x49, header[2] == 0x46, header[3] == 0x46,
@@ -10,6 +10,8 @@ enum WebPContainer {
     else {
       throw EXIFError.invalidWebPStructure
     }
+
+    var segments = MetadataSegments()
 
     while true {
       // Read chunk header: 4 bytes FourCC + 4 bytes size (little-endian)
@@ -22,27 +24,33 @@ enum WebPContainer {
         | Int(chunkHeader[6]) << 16
         | Int(chunkHeader[7]) << 24
 
-      if fourCC == "EXIF" {
+      // RIFF chunks are padded to even byte boundaries
+      let padding = size % 2
+
+      if fourCC == "EXIF" || fourCC == "XMP " {
         var chunkData = fileHandle.readData(ofLength: size)
         guard chunkData.count == size else { throw EXIFError.truncatedData }
 
-        // Some encoders prepend "Exif\0\0" like JPEG; strip if present
-        if chunkData.count >= 6,
-           chunkData[0] == 0x45, chunkData[1] == 0x78,
-           chunkData[2] == 0x69, chunkData[3] == 0x66,
-           chunkData[4] == 0x00, chunkData[5] == 0x00
-        {
-          chunkData = Data(chunkData.dropFirst(6))
+        if fourCC == "EXIF" {
+          // Some encoders prepend "Exif\0\0" like JPEG; strip if present
+          if chunkData.count >= 6,
+             chunkData[0] == 0x45, chunkData[1] == 0x78,
+             chunkData[2] == 0x69, chunkData[3] == 0x66,
+             chunkData[4] == 0x00, chunkData[5] == 0x00
+          {
+            chunkData = Data(chunkData.dropFirst(6))
+          }
+          segments.exif = segments.exif ?? chunkData
+        } else {
+          segments.xmp = segments.xmp ?? chunkData
         }
 
-        return chunkData
+        fileHandle.seek(toFileOffset: fileHandle.offsetInFile + UInt64(padding))
+      } else {
+        fileHandle.seek(toFileOffset: fileHandle.offsetInFile + UInt64(size + padding))
       }
-
-      // RIFF chunks are padded to even byte boundaries
-      let paddedSize = size + (size % 2)
-      fileHandle.seek(toFileOffset: fileHandle.offsetInFile + UInt64(paddedSize))
     }
 
-    throw EXIFError.noEXIFData
+    return segments
   }
 }

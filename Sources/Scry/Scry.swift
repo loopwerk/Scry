@@ -6,7 +6,8 @@ enum ImageFormat {
 
 public enum Scry {
   /// Extract metadata from a file at the given path.
-  /// Returns nil if the format is unsupported or no EXIF data is found.
+  /// Reads both EXIF and XMP; when a field is in both, the EXIF value wins.
+  /// Returns nil if the format is unsupported or no metadata is found.
   /// Only reads the metadata segments, not the entire image.
   public static func metadata(fromFileAt path: String) throws -> [String: Any]? {
     guard let fileHandle = FileHandle(forReadingAtPath: path) else {
@@ -20,18 +21,28 @@ public enum Scry {
 
     fileHandle.seek(toFileOffset: 0)
 
-    let exifBytes: Data
+    let segments: MetadataSegments
     do {
       switch format {
-        case .jpeg: exifBytes = try JPEGContainer.extractEXIF(from: fileHandle)
-        case .png: exifBytes = try PNGContainer.extractEXIF(from: fileHandle)
-        case .webp: exifBytes = try WebPContainer.extractEXIF(from: fileHandle)
+        case .jpeg: segments = try JPEGContainer.extractMetadata(from: fileHandle)
+        case .png: segments = try PNGContainer.extractMetadata(from: fileHandle)
+        case .webp: segments = try WebPContainer.extractMetadata(from: fileHandle)
       }
     } catch is EXIFError {
       return nil
     }
 
-    return try TIFFParser.parse(exifBytes)
+    var result: [String: Any] = [:]
+
+    if let xmp = segments.xmp {
+      result = XMPParser.parse(xmp)
+    }
+
+    if let exif = segments.exif, let exifValues = try TIFFParser.parse(exif) {
+      result.merge(exifValues) { _, exifValue in exifValue }
+    }
+
+    return result.isEmpty ? nil : result
   }
 
   /// Detect image format from magic bytes.

@@ -1,12 +1,19 @@
 import Foundation
 
+/// "Exif\0\0"
+private let exifSignature = Data([0x45, 0x78, 0x69, 0x66, 0x00, 0x00])
+/// "http://ns.adobe.com/xap/1.0/\0"
+private let xmpSignature = Data("http://ns.adobe.com/xap/1.0/".utf8) + Data([0x00])
+
 enum JPEGContainer {
-  /// Extract EXIF TIFF data from a JPEG file handle, reading only metadata segments.
-  static func extractEXIF(from fileHandle: FileHandle) throws -> Data {
+  /// Extract EXIF and XMP data from a JPEG file handle, reading only metadata segments.
+  static func extractMetadata(from fileHandle: FileHandle) throws -> MetadataSegments {
     let soi = fileHandle.readData(ofLength: 2)
     guard soi.count == 2, soi[0] == 0xFF, soi[1] == 0xD8 else {
       throw EXIFError.invalidJPEGStructure
     }
+
+    var segments = MetadataSegments()
 
     while true {
       // Read marker (2 bytes)
@@ -39,23 +46,15 @@ enum JPEGContainer {
 
       let payloadLength = length - 2
 
-      // APP1 marker — check for EXIF signature
-      if marker == 0xE1, payloadLength >= 6 {
-        let sig = fileHandle.readData(ofLength: 6)
-        guard sig.count == 6 else { throw EXIFError.truncatedData }
-        // "Exif\0\0"
-        if sig[0] == 0x45, sig[1] == 0x78, sig[2] == 0x69, sig[3] == 0x66,
-           sig[4] == 0x00, sig[5] == 0x00
-        {
-          let tiffLength = payloadLength - 6
-          let tiffData = fileHandle.readData(ofLength: tiffLength)
-          guard tiffData.count == tiffLength else { throw EXIFError.truncatedData }
-          return tiffData
-        }
-        // Not EXIF APP1, skip the rest of this segment
-        let remaining = payloadLength - 6
-        if remaining > 0 {
-          fileHandle.seek(toFileOffset: fileHandle.offsetInFile + UInt64(remaining))
+      // APP1 marker — holds either EXIF or XMP, told apart by their signature
+      if marker == 0xE1 {
+        let payload = fileHandle.readData(ofLength: payloadLength)
+        guard payload.count == payloadLength else { throw EXIFError.truncatedData }
+
+        if segments.exif == nil, payload.starts(with: exifSignature) {
+          segments.exif = Data(payload.dropFirst(exifSignature.count))
+        } else if segments.xmp == nil, payload.starts(with: xmpSignature) {
+          segments.xmp = Data(payload.dropFirst(xmpSignature.count))
         }
       } else {
         // Skip segment payload
@@ -63,6 +62,6 @@ enum JPEGContainer {
       }
     }
 
-    throw EXIFError.noEXIFData
+    return segments
   }
 }
