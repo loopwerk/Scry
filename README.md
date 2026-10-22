@@ -22,6 +22,14 @@ if let metadata = try? Scry.metadata(fromFileAt: "/path/to/photo.jpg") {
 
 Returns `nil` when the image has no EXIF or XMP data.
 
+### Dimensions
+
+```swift
+let (width, height) = try Scry.dimensions(fromFileAt: "/path/to/photo.jpg")
+```
+
+Reads the pixel size from the image header itself. The size is as stored: for a photo with an EXIF `Orientation` of 5 to 8 (rotated by 90°), swap width and height to get the displayed size.
+
 ## Installation
 
 Add to your `Package.swift`:

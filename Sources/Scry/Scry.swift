@@ -10,25 +10,10 @@ public enum Scry {
   /// Returns nil if the format is unsupported or no metadata is found.
   /// Only reads the metadata segments, not the entire image.
   public static func metadata(fromFileAt path: String) throws -> [String: Any]? {
-    guard let fileHandle = FileHandle(forReadingAtPath: path) else {
-      throw EXIFError.fileNotFound
-    }
-    defer { fileHandle.closeFile() }
-
-    // Read first 12 bytes for format detection
-    let header = fileHandle.readData(ofLength: 12)
-    let format = try detectFormat(header)
-
-    fileHandle.seek(toFileOffset: 0)
-
     let segments: MetadataSegments
     do {
-      switch format {
-        case .jpeg: segments = try JPEGContainer.extractMetadata(from: fileHandle)
-        case .png: segments = try PNGContainer.extractMetadata(from: fileHandle)
-        case .webp: segments = try WebPContainer.extractMetadata(from: fileHandle)
-      }
-    } catch is EXIFError {
+      segments = try readContainer(atPath: path)
+    } catch let error as EXIFError where error != .fileNotFound && error != .unsupportedFormat {
       return nil
     }
 
@@ -43,6 +28,34 @@ public enum Scry {
     }
 
     return result.isEmpty ? nil : result
+  }
+
+  /// Read the pixel size of the image at the given path from its header, without decoding the image.
+  /// This is the size as stored; it does not account for the EXIF `Orientation`.
+  public static func dimensions(fromFileAt path: String) throws -> (width: Int, height: Int) {
+    guard let dimensions = try readContainer(atPath: path).dimensions else {
+      throw EXIFError.noDimensions
+    }
+    return dimensions
+  }
+
+  private static func readContainer(atPath path: String) throws -> MetadataSegments {
+    guard let fileHandle = FileHandle(forReadingAtPath: path) else {
+      throw EXIFError.fileNotFound
+    }
+    defer { fileHandle.closeFile() }
+
+    // Read first 12 bytes for format detection
+    let header = fileHandle.readData(ofLength: 12)
+    let format = try detectFormat(header)
+
+    fileHandle.seek(toFileOffset: 0)
+
+    switch format {
+      case .jpeg: return try JPEGContainer.extractMetadata(from: fileHandle)
+      case .png: return try PNGContainer.extractMetadata(from: fileHandle)
+      case .webp: return try WebPContainer.extractMetadata(from: fileHandle)
+    }
   }
 
   /// Detect image format from magic bytes.

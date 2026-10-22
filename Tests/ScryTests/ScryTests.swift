@@ -163,6 +163,27 @@ private func assertXMPMetadata(_ meta: [String: Any]) {
   #expect(meta["DateTime"] as? String == "2026:04:12 08:05:00")
 }
 
+// MARK: - Dimensions
+
+@Test(arguments: [
+  ("test", "jpg"),
+  ("test", "png"),
+  ("test", "webp"), // VP8X, since it has metadata
+  ("test-vp8", "webp"), // Lossy, no metadata
+  ("test-vp8l", "webp"), // Lossless, no metadata
+])
+func dimensions(name: String, ext: String) throws {
+  let dimensions = try Scry.dimensions(fromFileAt: fixtureURL(name, ext: ext).path)
+  #expect(dimensions.width == 150)
+  #expect(dimensions.height == 200)
+}
+
+@Test func dimensionsUnsupportedFormat() throws {
+  #expect(throws: EXIFError.unsupportedFormat) {
+    try Scry.dimensions(fromFileAt: fixtureURL("test", ext: "gif").path)
+  }
+}
+
 // MARK: - General tests
 
 @Test func formatDetection() throws {

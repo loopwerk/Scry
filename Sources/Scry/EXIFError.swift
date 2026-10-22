@@ -7,6 +7,7 @@ public enum EXIFError: Error, CustomStringConvertible {
   case invalidWebPStructure
   case invalidTIFFHeader
   case noEXIFData
+  case noDimensions
   case truncatedData
   case fileNotFound
 
@@ -18,6 +19,7 @@ public enum EXIFError: Error, CustomStringConvertible {
       case .invalidWebPStructure: "Invalid WebP structure"
       case .invalidTIFFHeader: "Invalid TIFF header in EXIF data"
       case .noEXIFData: "No EXIF data found"
+      case .noDimensions: "No image dimensions found"
       case .truncatedData: "Unexpected end of data"
       case .fileNotFound: "File not found"
     }
